@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Train Defense — Documentation</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script type="importmap">
+    { "imports": {
+      "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+    }}
+  </script>
+  <style>
+    :root {
+      --bg-0: #09090b; --bg-1: #18181b; --bg-2: #27272a;
+      --border: #3f3f46; --border-hover: #52525b;
+      --text: #fafafa; --text-muted: #a1a1aa; --text-dim: #71717a;
+      --accent: #f59e0b; --accent-dim: #92400e;
+      --green: #22c55e; --red: #ef4444; --blue: #3b82f6; --purple: #a855f7; --cyan: #06b6d4;
+      --radius: 8px; --radius-lg: 12px;
+      --font: 'Inter', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--font); background: var(--bg-0); color: var(--text); line-height: 1.5; }
+
+    .header { position: sticky; top: 0; z-index: 20; background: rgba(9,9,11,0.9); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    .header-inner { max-width: 1440px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+    .header h1 { font-size: 18px; font-weight: 700; }
+    .header h1 span { color: var(--accent); }
+    .header .sep { width: 1px; height: 24px; background: var(--border); }
+    .header .status { font-size: 13px; color: var(--text-dim); font-family: var(--mono); }
+    .header .actions { margin-left: auto; display: flex; gap: 8px; }
+
+    .btn { padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-weight: 500; font-family: var(--font); cursor: pointer; transition: all 0.15s; background: var(--bg-2); color: var(--text); }
+    .btn:hover { border-color: var(--border-hover); background: #333; }
+    .btn-primary { background: var(--text); border-color: var(--text); color: var(--bg-0); font-weight: 600; }
+    .btn-primary:hover { background: #d4d4d8; }
+    .btn-primary.saved { background: var(--bg-2); border-color: var(--border); color: var(--text-dim); }
+    .btn-danger { background: transparent; border-color: transparent; color: var(--text-muted); }
+    .btn-danger:hover { color: var(--red); background: transparent; border-color: transparent; }
+
+    .content { max-width: 1440px; margin: 0 auto; padding: 24px; }
+
+    .card-preview { width: 80px; height: 80px; margin-left: auto; border-radius: 8px; overflow: hidden; flex-shrink: 0; background: var(--bg-0); }
+
+    .grid { columns: 3; column-gap: 16px; }
+    .grid > .card { break-inside: avoid; margin-bottom: 16px; }
+    @media (max-width: 1100px) { .grid { columns: 2; } }
+    @media (max-width: 700px) { .grid { columns: 1; } }
+
+    .card { background: #28282e; border: 1px solid #44444c; border-radius: var(--radius-lg); overflow: hidden; transition: border-color 0.15s; box-shadow: 0 4px 12px rgba(0,0,0,0.6), 0 12px 36px rgba(0,0,0,0.4); }
+    .card:hover { border-color: var(--border-hover); }
+    .card-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .card-header .icon { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .card-header h2 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+    .card-header .count { margin-left: auto; font-size: 11px; color: var(--text-dim); font-family: var(--mono); background: var(--bg-2); padding: 2px 8px; border-radius: 10px; }
+    .card-body { padding: 8px 0; }
+
+    .subgroup { margin: 8px 12px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .subgroup-header { padding: 6px 12px; background: rgba(255,255,255,0.03); font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+    .subgroup .param { padding: 0 12px; }
+
+    .param { padding: 0 16px; margin-bottom: 2px; }
+    .param:last-child { margin-bottom: 8px; }
+    .slider-row { display: flex; align-items: center; gap: 10px; padding: 8px 0 2px; transition: background 0.1s; border-radius: 6px; }
+    .param:hover .slider-row { background: rgba(255,255,255,0.02); }
+    .slider-row label { width: 130px; font-size: 13px; font-weight: 500; color: #e4e4e7; flex-shrink: 0; }
+    .slider-row .track-wrap { flex: 1; min-width: 80px; padding: 0 4px; }
+    .slider-row .val { width: 68px; text-align: right; font-family: var(--mono); font-size: 13px; font-weight: 500; flex-shrink: 0; background: var(--bg-0); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; outline: none; -moz-appearance: textfield; color: var(--text); transition: border-color 0.15s; }
+    .slider-row .val:focus { border-color: var(--text-muted); box-shadow: 0 0 0 2px rgba(255,255,255,0.08); }
+    .slider-row .val::-webkit-inner-spin-button, .slider-row .val::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .slider-row .val.changed { color: var(--text); border-color: var(--border-hover); }
+    .slider-row .val.default { color: var(--text-muted); }
+    .param-desc { font-size: 12px; color: var(--text-dim); padding: 2px 0 6px; line-height: 1.4; }
+
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; background: #3f3f46; border-radius: 3px; outline: none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--text); border: 2px solid var(--border-hover); cursor: grab; transition: box-shadow 0.15s, border-color 0.15s; margin-top: -5px; }
+    input[type=range]::-webkit-slider-thumb:hover { border-color: var(--text-muted); box-shadow: 0 0 0 4px rgba(255,255,255,0.08); }
+    input[type=range]::-webkit-slider-thumb:active { cursor: grabbing; box-shadow: 0 0 0 6px rgba(255,255,255,0.12); }
+    input[type=range]::-moz-range-track { height: 6px; background: #3f3f46; border-radius: 3px; border: none; }
+    input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--text); border: 2px solid var(--border-hover); cursor: grab; }
+
+    .card[data-color="green"] .card-header { border-left: 3px solid var(--green); }
+    .card[data-color="red"] .card-header { border-left: 3px solid var(--red); }
+    .card[data-color="blue"] .card-header { border-left: 3px solid var(--blue); }
+    .card[data-color="cyan"] .card-header { border-left: 3px solid var(--cyan); }
+    .card[data-color="amber"] .card-header { border-left: 3px solid var(--accent); }
+    .card[data-color="purple"] .card-header { border-left: 3px solid var(--purple); }
+    .card[data-color="orange"] .card-header { border-left: 3px solid #ffb74d; }
+    .card[data-color="sky"] .card-header { border-left: 3px solid #8ecae6; }
+    .card[data-color="violet"] .card-header { border-left: 3px solid #b388ff; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0; }
+    .tab { padding: 8px 18px; font-size: 13px; font-weight: 600; font-family: var(--font); cursor: pointer; background: transparent; border: none; color: var(--text-dim); border-bottom: 2px solid transparent; transition: all 0.15s; }
+    .tab:hover { color: var(--text-muted); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Docs layout — sidebar + main */
+    .docs-layout { display: flex; max-width: 1440px; margin: 0 auto; }
+
+    /* Sidebar */
+    .docs-sidebar { width: 260px; flex-shrink: 0; height: calc(100vh - 53px); position: sticky; top: 53px; overflow-y: auto; border-right: 1px solid var(--border); padding: 20px 0; background: var(--bg-0); }
+    .docs-sidebar::-webkit-scrollbar { width: 4px; }
+    .docs-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .docs-sidebar-title { padding: 0 16px 12px; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+    .docs-search { padding: 0 12px 12px; }
+    .docs-search input { width: 100%; padding: 7px 10px 7px 30px; font-size: 13px; font-family: var(--font); background: var(--bg-1); border: 1px solid var(--border); border-radius: 6px; color: var(--text); outline: none; transition: border-color 0.15s; }
+    .docs-search input:focus { border-color: var(--text-muted); }
+    .docs-search input::placeholder { color: var(--text-dim); }
+    .docs-search-wrap { position: relative; }
+    .docs-search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-dim); font-size: 13px; pointer-events: none; }
+
+    .docs-section { border-bottom: 1px solid rgba(63,63,70,0.5); }
+    .docs-section:last-child { border-bottom: none; }
+    .docs-section-toggle { display: flex; align-items: center; width: 100%; padding: 8px 16px; font-size: 13px; font-weight: 500; font-family: var(--font); color: var(--text-muted); background: none; border: none; cursor: pointer; text-align: left; transition: all 0.1s; gap: 8px; border-left: 2px solid transparent; }
+    .docs-section-toggle:hover { color: var(--text); background: rgba(255,255,255,0.02); }
+    .docs-section-toggle.active { color: var(--text); border-left-color: var(--accent); }
+    .docs-section-toggle .chevron { font-size: 10px; color: var(--text-dim); transition: transform 0.15s; flex-shrink: 0; width: 12px; }
+    .docs-section-toggle.open .chevron { transform: rotate(90deg); }
+    .docs-section-children { display: none; padding: 0 0 4px; }
+    .docs-section-children.open { display: block; }
+    .docs-section-children a { display: block; padding: 4px 16px 4px 36px; font-size: 12px; color: var(--text-dim); text-decoration: none; transition: all 0.1s; border-left: 2px solid transparent; line-height: 1.5; }
+    .docs-section-children a:hover { color: var(--text-muted); background: rgba(255,255,255,0.02); }
+    .docs-section-children a.active { color: var(--text-muted); border-left-color: var(--accent); background: rgba(245,158,11,0.04); }
+    .docs-section.hidden { display: none; }
+
+    @media (max-width: 900px) {
+      .docs-sidebar { display: none; }
+      .docs-main { margin-left: 0 !important; }
+    }
+
+    /* Main content */
+    .docs-main { flex: 1; min-width: 0; padding: 32px 40px; max-width: 860px; }
+    .docs-content h1 { font-size: 28px; font-weight: 700; margin: 0 0 8px; color: var(--accent); }
+    .docs-content h2 { font-size: 20px; font-weight: 700; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); color: var(--text); scroll-margin-top: 70px; }
+    .docs-content h3 { font-size: 16px; font-weight: 600; margin: 32px 0 12px; color: #e4e4e7; scroll-margin-top: 70px; }
+    .docs-content h4 { font-size: 14px; font-weight: 600; margin: 24px 0 8px; color: #d4d4d8; }
+    .docs-content p { font-size: 14px; line-height: 1.7; margin: 0 0 12px; color: #d4d4d8; }
+    .docs-content strong { color: var(--text); }
+    .docs-content a { color: var(--blue); text-decoration: none; }
+    .docs-content a:hover { text-decoration: underline; }
+    .docs-content ul, .docs-content ol { margin: 0 0 16px 24px; font-size: 14px; color: #d4d4d8; line-height: 1.7; }
+    .docs-content li { margin-bottom: 4px; }
+    .docs-content blockquote { border-left: 3px solid var(--accent); padding: 8px 16px; margin: 0 0 16px; background: rgba(245,158,11,0.05); border-radius: 0 var(--radius) var(--radius) 0; }
+    .docs-content blockquote p { color: var(--text-muted); margin: 0; }
+    .docs-content code { font-family: var(--mono); font-size: 13px; background: var(--bg-2); padding: 2px 6px; border-radius: 4px; color: var(--accent); }
+    .docs-content pre { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 0 0 16px; overflow-x: auto; }
+    .docs-content pre code { background: none; padding: 0; color: #d4d4d8; font-size: 13px; line-height: 1.6; }
+    .docs-content table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 13px; }
+    .docs-content th { text-align: left; padding: 8px 12px; background: var(--bg-2); border: 1px solid var(--border); font-weight: 600; color: var(--text); }
+    .docs-content td { padding: 8px 12px; border: 1px solid var(--border); color: #d4d4d8; }
+    .docs-content tr:hover td { background: rgba(255,255,255,0.02); }
+    .docs-content hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+    .docs-content input[type="checkbox"] { margin-right: 6px; accent-color: var(--accent); }
+
+    .docs-loading { text-align: center; padding: 80px 24px; color: var(--text-dim); font-size: 14px; }
+
+    /* UE5 Blueprint visual node styles */
+    .docs-content pre code .bp-node { color: #e4e4e7; }
+    .docs-content .bp-graph { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px; padding: 20px; margin: 16px 0; overflow-x: auto; font-family: var(--mono); font-size: 12px; line-height: 1.8; }
+    .docs-content .bp-graph .node { display: inline-block; background: #2a2a3a; border: 2px solid #444; border-radius: 6px; padding: 4px 10px; margin: 2px 0; white-space: nowrap; }
+    .docs-content .bp-graph .node-event { border-color: #c0392b; background: #3a1a1a; }
+    .docs-content .bp-graph .node-func { border-color: #2980b9; background: #1a2a3a; }
+    .docs-content .bp-graph .node-flow { border-color: #27ae60; background: #1a3a2a; }
+    .docs-content .bp-graph .node-var { border-color: #f39c12; background: #3a2a1a; }
+    .docs-content .bp-graph .node-branch { border-color: #8e44ad; background: #2a1a3a; }
+    .docs-content .bp-graph .pin-exec { color: #fff; }
+    .docs-content .bp-graph .pin-bool { color: #c0392b; }
+    .docs-content .bp-graph .pin-float { color: #27ae60; }
+    .docs-content .bp-graph .pin-obj { color: #2980b9; }
+    .docs-content .bp-graph .pin-vec { color: #f1c40f; }
+    .docs-content .bp-graph .wire { color: #555; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-inner">
+      <h1><span>Train Defense</span> Documentation</h1>
+      <div class="sep"></div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('tuner')">Tuner</button>
+        <button class="tab" onclick="switchTab('gamedocs')">Game Docs</button>
+        <button class="tab" onclick="switchTab('ue5')">UE5 Blueprint Guide</button>
+        <button class="tab" onclick="switchTab('changelog')">Changelog</button>
+      </div>
+      <span class="status" id="status">Loading...</span>
+      <div class="actions" id="tunerActions">
+        <button class="btn btn-danger" onclick="resetAll()">Reset All</button>
+        <button class="btn btn-primary" id="saveBtn" onclick="save()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content active" id="tab-tuner">
+    <div class="content">
+      <div class="grid" id="sections"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-gamedocs">
+    <div class="docs-layout">
+      <nav class="docs-sidebar" id="gameDocsSidebar">
+        <div class="docs-sidebar-title">On this page</div>
+        <div class="docs-search">
+          <div class="docs-search-wrap">
+            <span class="docs-search-icon">⌕</span>
+            <input type="text" id="gameDocsSearchInput" placeholder="Search..." autocomplete="off">
+          </div>
+        </div>
+        <div id="gameDocsSidebarNav"></div>
+      </nav>
+      <div class="docs-main">
+        <div class="docs-content" id="gameDocsContent">
+          <div class="docs-loading">Loading game documentation...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-changelog">
+    <div class="content" style="max-width:720px; margin:0 auto;">
+      <h2 style="color:var(--accent); margin-bottom:24px;">Changelog</h2>
+
+      <div class="card" style="margin-bottom:16px; padding:16px; background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius-lg);">
+        <h3 style="color:var(--text); font-size:15px; margin-bottom:8px;">2026-04-23 — Hit feedback tuning</h3>
+        <ul style="color:var(--text-muted); font-size:13px; line-height:1.8; padding-left:20px;">
+          <li><strong>Hit flash:</strong> Duration increased from 0.05s to 0.12s (visible for ~7 frames instead of ~3)</li>
+          <li><strong>Scale bump:</strong> Enemies scale up 15% during hit flash for visible impact feedback</li>
+          <li><strong>Knockback strength:</strong> Projectile knockback increased from 80 to 120</li>
+          <li><strong>Garlic knockback:</strong> Brawler garlic push increased from 200 to 250</li>
+          <li><strong>Knockback decay:</strong> Reduced from 12 to 8 for longer, more visible knockback</li>
+          <li><strong>Knockback easing:</strong> Added 60ms "stick" phase — full force maintained before decay kicks in for punchier feel</li>
+        </ul>
+      </div>
+
+      <div class="card" style="margin-bottom:16px; padding:16px; background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius-lg);">
+        <h3 style="color:var(--text); font-size:15px; margin-bottom:8px;">2026-04-23</h3>
+        <ul style="color:var(--text-muted); font-size:13px; line-height:1.8; padding-left:20px;">
+          <li><strong>Crew roles:</strong> Pick Gunner or Brawler before each world — no weapon slot at start, no more Engineer/Medic</li>
+          <li><strong>Brawler garlic:</strong> AOE damage aura (50 radius, 14 dmg/0.4s) with knockback + hit sparks, 3D aura ring per Brawler</li>
+          <li><strong>Brawler kick:</strong> Instant bandit kick, flies toward enemy cluster (max 100px), AOE landing damage (60 dmg, 160 radius), shockwave visual</li>
+          <li><strong>Auto Laser:</strong> Replaces Steam Blast — fires projectiles at nearest enemy (no cone), uses Garlic 3D model, earned as powerup</li>
+          <li><strong>Controls:</strong> Tab cycles crew selection, controls legend visible on left during runs</li>
+          <li><strong>Unmanned mounts:</strong> No longer auto-fire</li>
+          <li><strong>Damage numbers:</strong> Capped at enemy's remaining HP</li>
+          <li><strong>Gunner aim:</strong> Shots now fire through screen-space clamped cone angle — stays within visible cone</li>
+          <li><strong>Start screen:</strong> Gold displayed above buttons, dust particles removed</li>
+          <li><strong>Shop simplified:</strong> Only Damage, Kick Force, Max HP upgrades</li>
+          <li><strong>Docs:</strong> Updated GAME_DOCS.md, UNREAL_PORT.md (Steps 21-25 with Blueprint diagrams), tuner, changelog</li>
+        </ul>
+      </div>
+
+      <div class="card" style="margin-bottom:16px; padding:16px; background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius-lg);">
+        <h3 style="color:var(--text); font-size:15px; margin-bottom:8px;">2026-04-22</h3>
+        <ul style="color:var(--text-muted); font-size:13px; line-height:1.8; padding-left:20px;">
+          <li><strong>Brawler kick VFX:</strong> Dramatic launch arc, green trail, spinning bandit, "YEET!" text, landing shockwave + "SPLAT!"</li>
+          <li><strong>Cone fix:</strong> Both cone edges projected independently through isometric camera — fixes angular distortion</li>
+          <li><strong>Damage attribution:</strong> Red (enemy contact), purple (bandit HP drain), gold (stolen gold) floating numbers</li>
+          <li><strong>Mount status glows:</strong> Green (crewed), amber (unmanned), red/pulsing red (bandit occupied)</li>
+          <li><strong>Crew roles v1:</strong> Gunner 2x dmg, Engineer 2x auto-weapon fire rate, Medic HP regen after 3s stationary</li>
+          <li><strong>Hidden mechanics:</strong> Last-stand forgiveness (-30% dmg below 15% HP for 3s), buddy bonus (+15% dmg on adjacent mounts)</li>
+          <li><strong>Gun rebalance:</strong> Fire rate 5→2/s at lv1, DPS curve 24→141 across 5 levels (5.9x growth)</li>
+          <li><strong>Start screen:</strong> 3D train model, dark cinematic background, unified golden button style</li>
+          <li><strong>Bandit tuning:</strong> Smooth steal/HP drain ramp, gradual weapon degradation, recovery windows after surges</li>
+          <li><strong>Docs:</strong> Separated GAME_DOCS.md from UNREAL_PORT.md, 20-step Blueprint guide with sidebars</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-ue5">
+    <div class="docs-layout">
+      <nav class="docs-sidebar" id="ue5Sidebar">
+        <div class="docs-sidebar-title">On this page</div>
+        <div class="docs-search">
+          <div class="docs-search-wrap">
+            <span class="docs-search-icon">⌕</span>
+            <input type="text" id="ue5SearchInput" placeholder="Search..." autocomplete="off">
+          </div>
+        </div>
+        <div id="ue5SidebarNav"></div>
+      </nav>
+      <div class="docs-main">
+        <div class="docs-content" id="ue5Content">
+          <div class="docs-loading">Loading UE5 guide...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const _scrollSpyCleanups = {};
+
+    function buildSidebar(contentId, navId, searchInputId) {
+      const content = document.getElementById(contentId);
+      const nav = document.getElementById(navId);
+      const headings = content.querySelectorAll('h2, h3');
+      nav.innerHTML = '';
+
+      let currentSection = null;
+      const sections = [];
+
+      headings.forEach((h, i) => {
+        if (!h.id) h.id = contentId + '-heading-' + i;
+        if (h.tagName === 'H2') {
+          currentSection = { h2: h, children: [] };
+          sections.push(currentSection);
+        } else if (h.tagName === 'H3' && currentSection) {
+          currentSection.children.push(h);
+        }
+      });
+
+      sections.forEach((sec, si) => {
+        const div = document.createElement('div');
+        div.className = 'docs-section';
+        div.dataset.section = si;
+
+        const hasChildren = sec.children.length > 0;
+        const toggle = document.createElement('button');
+        toggle.className = 'docs-section-toggle';
+        toggle.innerHTML = `<span class="chevron">${hasChildren ? '▸' : ''}</span><span class="section-label">${sec.h2.textContent}</span>`;
+        toggle.dataset.target = sec.h2.id;
+
+        toggle.addEventListener('click', () => {
+          if (hasChildren) {
+            toggle.classList.toggle('open');
+            childrenDiv.classList.toggle('open');
+          }
+          sec.h2.scrollIntoView({ behavior: 'smooth' });
+          history.replaceState(null, '', '#' + sec.h2.id);
+        });
+        div.appendChild(toggle);
+
+        const childrenDiv = document.createElement('div');
+        childrenDiv.className = 'docs-section-children';
+        sec.children.forEach(h3 => {
+          const a = document.createElement('a');
+          a.href = '#' + h3.id;
+          a.textContent = h3.textContent;
+          a.dataset.target = h3.id;
+          a.addEventListener('click', (e) => {
+            e.preventDefault();
+            h3.scrollIntoView({ behavior: 'smooth' });
+            history.replaceState(null, '', '#' + h3.id);
+          });
+          childrenDiv.appendChild(a);
+        });
+        div.appendChild(childrenDiv);
+        nav.appendChild(div);
+      });
+
+      // Search
+      const searchInput = document.getElementById(searchInputId);
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.toLowerCase().trim();
+        nav.querySelectorAll('.docs-section').forEach(sec => {
+          const toggle = sec.querySelector('.docs-section-toggle');
+          const children = sec.querySelector('.docs-section-children');
+          const label = toggle.querySelector('.section-label').textContent.toLowerCase();
+          const childLinks = children.querySelectorAll('a');
+
+          if (!q) {
+            sec.classList.remove('hidden');
+            childLinks.forEach(a => a.style.display = '');
+            if (!toggle.classList.contains('open')) {
+              children.classList.remove('open');
+              toggle.classList.remove('open');
+            }
+            return;
+          }
+
+          let sectionMatch = label.includes(q);
+          let anyChildMatch = false;
+          childLinks.forEach(a => {
+            const match = a.textContent.toLowerCase().includes(q);
+            a.style.display = match ? '' : 'none';
+            if (match) anyChildMatch = true;
+          });
+
+          if (sectionMatch || anyChildMatch) {
+            sec.classList.remove('hidden');
+            if (anyChildMatch) {
+              children.classList.add('open');
+              toggle.classList.add('open');
+            }
+          } else {
+            sec.classList.add('hidden');
+          }
+        });
+      });
+
+      // Scroll spy
+      if (_scrollSpyCleanups[contentId]) _scrollSpyCleanups[contentId]();
+
+      const observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const id = entry.target.id;
+          nav.querySelectorAll('.docs-section-toggle, .docs-section-children a').forEach(el => el.classList.remove('active'));
+
+          const childLink = nav.querySelector(`.docs-section-children a[data-target="${id}"]`);
+          if (childLink) {
+            childLink.classList.add('active');
+            const sec = childLink.closest('.docs-section');
+            if (sec) {
+              sec.querySelector('.docs-section-toggle').classList.add('active', 'open');
+              sec.querySelector('.docs-section-children').classList.add('open');
+            }
+          } else {
+            const toggle = nav.querySelector(`.docs-section-toggle[data-target="${id}"]`);
+            if (toggle) toggle.classList.add('active');
+          }
+          break;
+        }
+      }, { rootMargin: '-60px 0px -70% 0px', threshold: 0 });
+
+      headings.forEach(h => observer.observe(h));
+      _scrollSpyCleanups[contentId] = () => observer.disconnect();
+    }
+
+    function loadMarkdownTab(mdPath, contentId, navId, searchInputId, errorMsg) {
+      fetch(mdPath)
+        .then(r => r.text())
+        .then(md => {
+          document.getElementById(contentId).innerHTML = marked.parse(md);
+          buildSidebar(contentId, navId, searchInputId);
+        })
+        .catch(() => {
+          document.getElementById(contentId).innerHTML = `<p style="color:var(--red)">${errorMsg}</p>`;
+        });
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.getElementById('tab-' + tabId).classList.add('active');
+      document.querySelector(`.tab[onclick="switchTab('${tabId}')"]`).classList.add('active');
+      document.getElementById('tunerActions').style.display = tabId === 'tuner' ? 'flex' : 'none';
+
+      if (tabId === 'gamedocs' && !window._gameDocsLoaded) {
+        window._gameDocsLoaded = true;
+        loadMarkdownTab('docs/GAME_DOCS.md', 'gameDocsContent', 'gameDocsSidebarNav', 'gameDocsSearchInput',
+          'Failed to load GAME_DOCS.md.');
+      }
+
+      if (tabId === 'ue5' && !window._ue5Loaded) {
+        window._ue5Loaded = true;
+        loadMarkdownTab('docs/UNREAL_PORT.md', 'ue5Content', 'ue5SidebarNav', 'ue5SearchInput',
+          'Failed to load UNREAL_PORT.md.');
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+
+    // ======= INLINE 3D PREVIEWS =======
+    const loader = new FBXLoader();
+    const previews = []; // { renderer, scene, camera, canvas, model }
+
+    function createMiniPreview(canvas, modelPath, opts = {}) {
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(80, 80);
+      renderer.setClearColor(0x000000, 0);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 2000);
+      camera.position.set(opts.camX ?? 40, opts.camY ?? 30, opts.camZ ?? 40);
+      camera.lookAt(0, opts.lookY ?? 5, 0);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const dl = new THREE.DirectionalLight(0xffffff, 0.8);
+      dl.position.set(30, 50, 30);
+      scene.add(dl);
+
+      const entry = { renderer, scene, camera, canvas, model: null, opts };
+      previews.push(entry);
+
+      loader.load(modelPath, (obj) => {
+        obj.scale.setScalar(opts.scale ?? 0.05);
+        if (opts.color) {
+          obj.traverse(c => { if (c.isMesh && c.material) { c.material = c.material.clone(); c.material.color.set(opts.color); } });
+        }
+        scene.add(obj);
+        entry.model = obj;
+      });
+
+      return entry;
+    }
+
+    // Animate all mini previews (slow rotation)
+    let angle = 0;
+    (function animate() {
+      angle += 0.008;
+      for (const p of previews) {
+        if (!p.model) { p.renderer.render(p.scene, p.camera); continue; }
+        p.model.rotation.y = angle;
+        p.renderer.render(p.scene, p.camera);
+      }
+      requestAnimationFrame(animate);
+    })();
+
+    // Track preview entries by section for updates
+    const previewBySection = {};
+
+    window.updatePreview = function(v) {
+      if (previewBySection['Enemies']) {
+        const e = previewBySection['Enemies'];
+        if (e.model) e.model.scale.setScalar(0.045 * (v.ENEMY_PURPLE_RADIUS_MULT || 1.5));
+      }
+    };
+
+    // Section → model config
+    const SECTION_MODELS = {
+      'Your Train': { path: '/assets/Train.fbx', scale: 0.03, camX: 80, camY: 20, camZ: 80, lookY: 8 },
+      'Zombies': { path: '/assets/enemy.fbx', scale: 0.07, camX: 30, camY: 20, camZ: 30, lookY: 5 },
+      'Turret': { path: '/assets/AutoGun.fbx', scale: 0.1, camX: 20, camY: 15, camZ: 20, lookY: 3 },
+      'Laser': { path: '/assets/Laser.fbx', scale: 0.1, camX: 20, camY: 15, camZ: 20, lookY: 3 },
+      'Auto Laser': { path: '/assets/Garlic.fbx', scale: 0.1, camX: 20, camY: 15, camZ: 20, lookY: 3 },
+    };
+
+    // ======= PARAMS — simplified with descriptions =======
+    const PARAMS = [
+      // Train
+      { section: 'Your Train', color: 'green', key: 'TRAIN_MAX_HP', label: 'Max HP', desc: 'How much damage your train can take before dying', default: 150, min: 20, max: 500, step: 10 },
+      { section: 'Your Train', key: 'TRAIN_SPEED', label: 'Travel Speed', desc: 'How fast the train moves during combat — higher = shorter fights', default: 167, min: 50, max: 400, step: 1 },
+      { section: 'Your Train', key: 'CAR_WIDTH', label: 'Hitbox Width', desc: 'Width of each car\'s collision box — bigger = easier to hit', default: 32, min: 10, max: 100, step: 1 },
+      { section: 'Your Train', key: 'CAR_HEIGHT', label: 'Hitbox Depth', desc: 'Depth of each car\'s collision box', default: 14, min: 5, max: 60, step: 1 },
+      { section: 'Your Train', key: 'CARGO_BOXES_START', label: 'Cargo Boxes', desc: 'Starting cargo — each box adds to your gold multiplier on win', default: 4, min: 0, max: 8, step: 1 },
+      { section: 'Your Train', key: 'CARGO_MULTIPLIER_PER_BOX', label: 'Gold Mult/Box', desc: 'How much each cargo box adds to your gold multiplier', default: 0.25, min: 0.05, max: 1, step: 0.05 },
+
+      // Enemies
+      { section: 'Zombies', color: 'red', group: 'Shared', key: 'ENEMY_BASE_HP', label: 'Base HP', desc: 'Starting health before tier multipliers', default: 20, min: 5, max: 200, step: 5 },
+      { section: 'Zombies', group: 'Shared', key: 'ENEMY_BASE_SPEED', label: 'Base Speed', desc: 'How fast zombies move toward your train', default: 50, min: 10, max: 200, step: 5 },
+      { section: 'Zombies', group: 'Shared', key: 'ENEMY_RADIUS', label: 'Base Size', desc: 'Base collision radius before tier multipliers', default: 6, min: 2, max: 30, step: 1 },
+      { section: 'Zombies', group: 'Shared', key: 'ENEMY_CONTACT_DAMAGE', label: 'Contact Damage', desc: 'Damage when a zombie reaches your train', default: 8, min: 1, max: 30, step: 1 },
+      { section: 'Zombies', group: 'Spawning', key: 'ENEMY_SPAWN_INTERVAL_START', label: 'Spawn Rate (start)', desc: 'Seconds between spawns at start — lower = more', default: 2.0, min: 0.2, max: 5, step: 0.1 },
+      { section: 'Zombies', group: 'Spawning', key: 'ENEMY_SPAWN_INTERVAL_MIN', label: 'Spawn Rate (fastest)', desc: 'Minimum interval at max difficulty', default: 0.5, min: 0.05, max: 2, step: 0.05 },
+      { section: 'Zombies', group: 'Purple (easy)', key: 'ENEMY_PURPLE_RADIUS_MULT', label: 'Size Multiplier', desc: 'How big relative to base size', default: 1.5, min: 0.5, max: 5, step: 0.25 },
+      { section: 'Zombies', group: 'Purple (easy)', key: 'ENEMY_PURPLE_HP_MULT', label: 'HP Multiplier', desc: 'HP relative to base HP', default: 1, min: 0.5, max: 5, step: 0.5 },
+      { section: 'Zombies', group: 'Red — medium', key: 'ENEMY_RED_RADIUS_MULT', label: 'Size Multiplier', desc: 'How big relative to base size', default: 5, min: 1, max: 10, step: 0.5 },
+      { section: 'Zombies', group: 'Red — medium', key: 'ENEMY_RED1_HP_MULT', label: 'HP Multiplier', desc: 'HP relative to base HP', default: 4, min: 1, max: 15, step: 0.5 },
+      { section: 'Zombies', group: 'Red — hard', key: 'ENEMY_RED2_HP_MULT', label: 'HP Multiplier', desc: 'HP relative to base HP (same size as medium)', default: 6, min: 1, max: 20, step: 0.5 },
+
+      // Crew Weapons
+      { section: 'Crew Weapons', color: 'blue', key: 'WEAPON_DAMAGE', label: 'Damage', desc: 'Damage per shot from crew-manned weapons', default: 12, min: 1, max: 50, step: 1 },
+      { section: 'Crew Weapons', key: 'WEAPON_FIRE_RATE', label: 'Fire Rate', desc: 'Shots per second for crew weapons', default: 5, min: 1, max: 20, step: 0.5 },
+      { section: 'Crew Weapons', key: 'WEAPON_RANGE', label: 'Range', desc: 'How far crew weapons can shoot', default: 220, min: 50, max: 500, step: 10 },
+      { section: 'Crew Weapons', key: 'PROJECTILE_SPEED', label: 'Bullet Speed', desc: 'How fast bullets travel', default: 350, min: 100, max: 800, step: 10 },
+      { section: 'Crew Weapons', key: 'PROJECTILE_LIFETIME', label: 'Bullet Lifetime', desc: 'How long bullets exist (seconds) before vanishing', default: 2, min: 0.5, max: 5, step: 0.25 },
+      { section: 'Crew Weapons', key: 'PROJECTILE_RADIUS', label: 'Bullet Size', desc: 'Collision radius of bullets — bigger = easier to hit', default: 3, min: 1, max: 10, step: 1 },
+      { section: 'Crew Weapons', key: 'DRIVER_DAMAGE_BUFF', label: 'Driver Bonus', desc: 'Damage multiplier when someone is driving the train', default: 1.0, min: 1, max: 3, step: 0.1 },
+
+      // Turret (base + scaling)
+      { section: 'Turret', color: 'orange', key: 'TURRET_LV1_DAMAGE', label: 'Base Damage', desc: 'Damage at level 1', default: 10, min: 1, max: 50, step: 1 },
+      { section: 'Turret', key: 'TURRET_DAMAGE_GROWTH', label: 'Damage/Level', desc: 'Extra damage per level', default: 2, min: 0, max: 10, step: 1 },
+      { section: 'Turret', key: 'TURRET_LV1_FIRE_INTERVAL', label: 'Base Fire Interval', desc: 'Seconds between shots at level 1 — lower = faster', default: 1.2, min: 0.2, max: 3, step: 0.05 },
+      { section: 'Turret', key: 'TURRET_INTERVAL_REDUCTION', label: 'Interval Reduction/Lv', desc: 'How much faster per level', default: 0.1, min: 0, max: 0.5, step: 0.025 },
+      { section: 'Turret', key: 'TURRET_LV1_RANGE', label: 'Base Range', desc: 'Targeting range at level 1', default: 250, min: 100, max: 600, step: 10 },
+      { section: 'Turret', key: 'TURRET_RANGE_GROWTH', label: 'Range/Level', desc: 'Extra range per level', default: 20, min: 0, max: 50, step: 5 },
+      { section: 'Turret', key: 'TURRET_LV1_SHOTS', label: 'Base Shots/Burst', desc: 'Projectiles per burst at level 1', default: 1, min: 1, max: 10, step: 1 },
+      { section: 'Turret', key: 'TURRET_SHOT_GROWTH', label: 'Extra Shot/Level', desc: 'Additional projectiles per level', default: 1, min: 0, max: 3, step: 1 },
+
+      // Auto Laser (base + scaling)
+      { section: 'Auto Laser', color: 'sky', key: 'AUTOLASER_LV1_DAMAGE', label: 'Base Damage', desc: 'Damage per shot at level 1', default: 10, min: 1, max: 50, step: 1 },
+      { section: 'Auto Laser', key: 'AUTOLASER_DAMAGE_GROWTH', label: 'Damage/Level', desc: 'Extra damage per level', default: 3, min: 0, max: 10, step: 1 },
+      { section: 'Auto Laser', key: 'AUTOLASER_LV1_FIRE_INTERVAL', label: 'Base Fire Interval', desc: 'Seconds between shots at level 1 — lower = faster', default: 1.4, min: 0.3, max: 3, step: 0.05 },
+      { section: 'Auto Laser', key: 'AUTOLASER_INTERVAL_REDUCTION', label: 'Interval Reduction/Lv', desc: 'How much faster per level', default: 0.15, min: 0, max: 0.5, step: 0.025 },
+      { section: 'Auto Laser', key: 'AUTOLASER_LV1_RANGE', label: 'Base Range', desc: 'Targeting range at level 1', default: 240, min: 50, max: 600, step: 10 },
+      { section: 'Auto Laser', key: 'AUTOLASER_RANGE_GROWTH', label: 'Range/Level', desc: 'Extra range per level', default: 20, min: 0, max: 50, step: 5 },
+
+      // Laser (base + scaling)
+      { section: 'Laser', color: 'violet', key: 'LASER_LV1_BOUNCES', label: 'Base Bounces', desc: 'Number of enemy bounces at level 1', default: 2, min: 1, max: 15, step: 1 },
+      { section: 'Laser', key: 'LASER_BOUNCE_GROWTH', label: 'Bounces/Level', desc: 'Extra bounces per level', default: 1, min: 0, max: 3, step: 1 },
+      { section: 'Laser', key: 'LASER_LV1_DAMAGE', label: 'Base Damage', desc: 'Damage per hit at level 1', default: 8, min: 1, max: 50, step: 1 },
+      { section: 'Laser', key: 'LASER_DAMAGE_GROWTH', label: 'Damage/Level', desc: 'Extra damage per level', default: 3, min: 0, max: 10, step: 1 },
+      { section: 'Laser', key: 'LASER_LV1_FIRE_INTERVAL', label: 'Base Fire Interval', desc: 'Seconds between shots — lower = faster', default: 2.5, min: 0.3, max: 5, step: 0.1 },
+      { section: 'Laser', key: 'LASER_INTERVAL_REDUCTION', label: 'Interval Reduction/Lv', desc: 'How much faster per level', default: 0.3, min: 0, max: 1, step: 0.05 },
+      { section: 'Laser', key: 'LASER_LV1_SPEED', label: 'Base Speed', desc: 'Bolt travel speed at level 1', default: 300, min: 100, max: 800, step: 10 },
+      { section: 'Laser', key: 'LASER_SPEED_GROWTH', label: 'Speed/Level', desc: 'Extra bolt speed per level', default: 25, min: 0, max: 50, step: 5 },
+
+      // Brawler Garlic
+      { section: 'Brawler Garlic', color: 'green', key: 'BRAWLER_GARLIC_RADIUS', label: 'Aura Radius', desc: 'Garlic AOE damage radius', default: 50, min: 20, max: 200, step: 5 },
+      { section: 'Brawler Garlic', key: 'BRAWLER_GARLIC_DAMAGE', label: 'Damage/Tick', desc: 'Damage dealt per tick to enemies in range', default: 14, min: 1, max: 50, step: 1 },
+      { section: 'Brawler Garlic', key: 'BRAWLER_GARLIC_TICK_RATE', label: 'Tick Rate', desc: 'Seconds between damage ticks', default: 0.4, min: 0.1, max: 2, step: 0.05 },
+
+      // Brawler Kick
+      { section: 'Brawler Kick', color: 'green', key: 'BRAWLER_KICK_DAMAGE', label: 'Kick AOE Damage', desc: 'Damage when kicked bandit lands', default: 60, min: 10, max: 200, step: 5 },
+      { section: 'Brawler Kick', key: 'BRAWLER_KICK_RADIUS', label: 'Kick AOE Radius', desc: 'Radius of landing damage area', default: 160, min: 50, max: 400, step: 10 },
+
+      // Crew Roles
+      { section: 'Crew Roles', color: 'amber', key: 'GUNNER_DAMAGE_MULT', label: 'Gunner Damage Mult', desc: 'Damage multiplier for Gunner role', default: 1.6, min: 1, max: 3, step: 0.1 },
+      { section: 'Crew Roles', key: 'GUNNER_FIGHT_DURATION_MULT', label: 'Gunner Fight Duration', desc: 'Multiplier for bandit fight time (Gunner takes longer)', default: 2.0, min: 1, max: 5, step: 0.5 },
+
+      // Progression
+      { section: 'Progression', color: 'cyan', key: 'XP_PER_KILL', label: 'XP per Kill', desc: 'Experience gained from each enemy killed', default: 12, min: 1, max: 50, step: 1 },
+      { section: 'Progression', key: 'XP_PER_LEVEL', label: 'XP per Level', desc: 'XP needed to level up — higher = slower progression', default: 80, min: 10, max: 300, step: 5 },
+      { section: 'Progression', key: 'TARGET_DISTANCE', label: 'Run Distance', desc: 'How far the train travels per combat — higher = longer fights', default: 10000, min: 2000, max: 30000, step: 500 },
+      { section: 'Progression', key: 'WAVE_CYCLE_DURATION', label: 'Wave Cycle Duration', desc: 'Total seconds per wave cycle (surge + calm)', default: 12, min: 5, max: 60, step: 1 },
+      { section: 'Progression', key: 'WAVE_SURGE_DURATION', label: 'Wave Surge Duration', desc: 'Seconds of heavy spawning per cycle', default: 5, min: 1, max: 30, step: 1 },
+      { section: 'Progression', key: 'WAVE_CALM_DURATION', label: 'Wave Calm Duration', desc: 'Seconds of reduced spawning per cycle', default: 5, min: 1, max: 30, step: 1 },
+      { section: 'Progression', key: 'WAVE_SURGE_SPAWN_MULT', label: 'Surge Spawn Mult', desc: 'Spawn rate multiplier during surge phase', default: 2.0, min: 0.5, max: 5, step: 0.25 },
+      { section: 'Progression', key: 'WAVE_CALM_SPAWN_MULT', label: 'Calm Spawn Mult', desc: 'Spawn rate multiplier during calm phase', default: 0.5, min: 0.1, max: 2, step: 0.1 },
+      { section: 'Progression', key: 'WAVE_ESCALATION', label: 'Wave Escalation', desc: 'Per-wave difficulty increase (0.10 = +10% each wave)', default: 0.10, min: 0, max: 0.5, step: 0.01 },
+      { section: 'Progression', key: 'WAVE_WARNING_DURATION', label: 'Wave Warning', desc: 'Seconds of warning before a surge begins', default: 3, min: 0, max: 10, step: 0.5 },
+      { section: 'Progression', key: 'WAVE_BOSS_SURGE_MULT', label: 'Boss Surge Mult', desc: 'Extra intense spawn multiplier for boss waves', default: 3.5, min: 1, max: 8, step: 0.25 },
+      { section: 'Progression', key: 'UNMANNED_EFFECTIVENESS', label: 'Unmanned Effectiveness', desc: 'Weapon effectiveness without crew (0.10 = near-useless)', default: 0.10, min: 0, max: 1, step: 0.05 },
+      { section: 'Progression', key: 'BANDIT_SPAWN_INTERVAL', label: 'Bandit Spawn Interval', desc: 'Seconds between bandit spawns', default: 12, min: 5, max: 60, step: 1 },
+      { section: 'Progression', key: 'BANDIT_SPEED', label: 'Bandit Speed', desc: 'How fast bandits approach your train', default: 110, min: 30, max: 300, step: 5 },
+      { section: 'Progression', key: 'BANDIT_FIGHT_DURATION', label: 'Bandit Fight Duration', desc: 'Seconds to fight off a bandit at a mount', default: 0.5, min: 0.1, max: 3, step: 0.1 },
+      { section: 'Progression', key: 'BANDIT_STEAL_RATE', label: 'Bandit Steal Rate', desc: 'Gold per second stolen by bandits (0 = disabled)', default: 0, min: 0, max: 20, step: 1 },
+
+      // World
+      { section: 'World', color: 'cyan', key: 'ZONES_PER_WORLD', label: 'Zones per World', desc: 'Number of zones to complete before winning', default: 3, min: 1, max: 10, step: 1 },
+      { section: 'World', key: 'ZONE_DIFFICULTY_SCALE', label: 'Zone Difficulty Scale', desc: 'How much harder each zone gets — 0.2 = gentle, 1.0 = doubles each zone', default: 0.2, min: 0.1, max: 1.5, step: 0.05 },
+      { section: 'World', key: 'GOLD_PER_STATION', label: 'Gold per Station', desc: 'Bonus gold for each station visited when completing a zone', default: 25, min: 5, max: 100, step: 5 },
+      { section: 'World', key: 'COAL_PER_WIN', label: 'Coal per Win', desc: 'Coal refueled after winning a combat', default: 2, min: 0, max: 5, step: 1 },
+      { section: 'World', key: 'COIN_VALUE', label: 'Coin Value', desc: 'Gold earned per coin collected', default: 10, min: 1, max: 50, step: 1 },
+      { section: 'World', key: 'COIN_SPAWN_INTERVAL', label: 'Coin Spawn Rate', desc: 'Seconds between coin spawns — lower = more coins', default: 3, min: 0.5, max: 10, step: 0.5 },
+
+      // Shop upgrades
+      { section: 'Shop Upgrades', color: 'purple', group: 'Damage', key: 'SHOP_DAMAGE_COST', label: 'Cost', desc: 'Base gold cost per level', default: 40, min: 5, max: 200, step: 5 },
+      { section: 'Shop Upgrades', group: 'Damage', key: 'SHOP_DAMAGE_PER_LEVEL', label: '% per Level', desc: 'Weapon damage increase per level', default: 15, min: 5, max: 50, step: 1 },
+      { section: 'Shop Upgrades', group: 'Kick Force', key: 'SHOP_KICK_COST', label: 'Cost', desc: 'Base gold cost per level', default: 40, min: 5, max: 200, step: 5 },
+      { section: 'Shop Upgrades', group: 'Kick Force', key: 'SHOP_KICK_PER_LEVEL', label: 'Levels', desc: 'Each level adds kick damage and radius', default: 1, min: 1, max: 10, step: 1 },
+      { section: 'Shop Upgrades', group: 'Max Hull', key: 'SHOP_MAXHP_COST', label: 'Cost', desc: 'Base gold cost per level', default: 30, min: 5, max: 200, step: 5 },
+      { section: 'Shop Upgrades', group: 'Max Hull', key: 'SHOP_MAXHP_PER_LEVEL', label: 'HP per Level', desc: 'Extra max HP per level', default: 25, min: 5, max: 50, step: 5 },
+    ];
+
+    const sectionMeta = {};
+    for (const p of PARAMS) {
+      if (p.color && !sectionMeta[p.section]) sectionMeta[p.section] = { color: p.color };
+    }
+
+    let values = {};
+    let dirty = false;
+
+    async function load() {
+      let saved = {};
+      try { const r = await fetch('/tuning.json'); if (r.ok) saved = await r.json(); } catch(e) {}
+      values = {};
+      for (const p of PARAMS) values[p.key] = saved[p.key] ?? p.default;
+    }
+
+    function render() {
+      const container = document.getElementById('sections');
+      container.innerHTML = '';
+      const sectionEls = {};
+      const groupEls = {};
+
+      for (const p of PARAMS) {
+        const meta = sectionMeta[p.section] || { color: 'cyan' };
+        if (!sectionEls[p.section]) {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.dataset.color = meta.color;
+          const count = PARAMS.filter(pp => pp.section === p.section).length;
+          const hasModel = SECTION_MODELS[p.section];
+          const colorMap = { green:'#22c55e', red:'#ef4444', blue:'#3b82f6', cyan:'#06b6d4', amber:'#f59e0b', purple:'#a855f7', orange:'#ffb74d', sky:'#8ecae6', violet:'#b388ff' };
+          const dotColor = colorMap[meta.color] || '#71717a';
+          card.innerHTML = `<div class="card-header"><span class="icon" style="background:${dotColor}"></span><h2>${p.section}</h2><span class="count">${count}</span>${hasModel ? '<canvas class="card-preview"></canvas>' : ''}</div><div class="card-body"></div>`;
+          container.appendChild(card);
+          sectionEls[p.section] = card.querySelector('.card-body');
+
+          if (hasModel) {
+            const canvas = card.querySelector('.card-preview');
+            const entry = createMiniPreview(canvas, hasModel.path, hasModel);
+            previewBySection[p.section] = entry;
+          }
+        }
+
+        const isFloat = p.step < 1;
+        const isChanged = values[p.key] !== p.default;
+        const displayVal = isFloat ? values[p.key].toFixed(2) : values[p.key];
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'param';
+        wrapper.innerHTML = `
+          <div class="slider-row">
+            <label>${p.label}</label>
+            <div class="track-wrap"><input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${values[p.key]}"></div>
+            <input type="number" class="val ${isChanged ? 'changed' : 'default'}" id="val-${p.key}" value="${displayVal}" step="${p.step}" min="${p.min}" max="${p.max}">
+          </div>
+          <div class="param-desc">${p.desc}</div>
+        `;
+        let parent = sectionEls[p.section];
+        if (p.group) {
+          const gk = `${p.section}::${p.group}`;
+          if (!groupEls[gk]) {
+            const sub = document.createElement('div');
+            sub.className = 'subgroup';
+            sub.innerHTML = `<div class="subgroup-header">${p.group}</div>`;
+            sectionEls[p.section].appendChild(sub);
+            groupEls[gk] = sub;
+          }
+          parent = groupEls[gk];
+        }
+        parent.appendChild(wrapper);
+
+        const slider = wrapper.querySelector('input[type=range]');
+        const numInput = wrapper.querySelector('input[type=number]');
+
+        function update(v) {
+          v = Math.max(p.min, Math.min(p.max, v));
+          values[p.key] = v;
+          numInput.className = `val ${v !== p.default ? 'changed' : 'default'}`;
+          setDirty(true);
+          if (window.updatePreview) window.updatePreview(values);
+        }
+
+        slider.addEventListener('input', () => { const v = parseFloat(slider.value); update(v); numInput.value = isFloat ? v.toFixed(2) : v; });
+        numInput.addEventListener('input', () => { const v = parseFloat(numInput.value); if (!isNaN(v)) { update(v); slider.value = v; } });
+        numInput.addEventListener('blur', () => { numInput.value = isFloat ? values[p.key].toFixed(2) : values[p.key]; });
+      }
+    }
+
+    function setDirty(d) {
+      dirty = d;
+      const btn = document.getElementById('saveBtn');
+      btn.classList.toggle('saved', !d);
+      btn.textContent = d ? 'Save' : 'Saved';
+      document.getElementById('status').textContent = d ? 'Unsaved changes' : '';
+    }
+
+    window.save = async function() {
+      try {
+        const r = await fetch('/save-tuning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
+        if (!r.ok) throw 0;
+        setDirty(false);
+        document.getElementById('status').textContent = 'Saved! Refresh game to apply.';
+        setTimeout(() => { if (!dirty) document.getElementById('status').textContent = ''; }, 3000);
+      } catch(e) { document.getElementById('status').textContent = 'Save failed — is server.js running?'; }
+    };
+
+    window.resetAll = async function() {
+      if (!confirm('Reset all values to defaults?')) return;
+      for (const p of PARAMS) values[p.key] = p.default;
+      await fetch('/save-tuning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
+      render(); setDirty(false);
+      if (window.updatePreview) window.updatePreview(values);
+    };
+
+    await load(); render(); setDirty(false);
+    if (window.updatePreview) window.updatePreview(values);
+    document.getElementById('status').textContent = 'Loaded'; setTimeout(() => document.getElementById('status').textContent = '', 2000);
+  </script>
+</body>
+</html>

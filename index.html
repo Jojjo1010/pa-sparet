@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Train Defense</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+    }
+    #game3d, #gameUI {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #game3d {
+      z-index: 0;
+    }
+    #gameUI {
+      z-index: 1;
+      background: transparent;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="container">
+    <canvas id="game3d"></canvas>
+    <canvas id="gameUI"></canvas>
+  </div>
+  <script>
+    // Load tuning before modules init (sync to guarantee availability)
+    window.__tuning = {};
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', '/tuning.json', false);
+      xhr.send();
+      if (xhr.status === 200) window.__tuning = JSON.parse(xhr.responseText);
+    } catch(e) { console.warn('Could not load tuning.json'); }
+  </script>
+  <script type="module">
+    try {
+      await import('./src/main.js');
+    } catch(e) {
+      document.body.style.background = '#300';
+      document.body.innerHTML = '<pre style="color:#f88;padding:20px;font-size:14px">' + e.message + '\n' + e.stack + '</pre>';
+      console.error(e);
+    }
+  </script>
+</body>
+</html>
