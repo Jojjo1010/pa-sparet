@@ -236,9 +236,8 @@ export class Spawner {
     if (this.postSurgeSilenceTimer > 0) this.postSurgeSilenceTimer -= dt;
     const waveMult = this.getWaveSpawnMultiplier();
 
-    // Difficulty scales with distance AND station depth (unchanged)
-    const distDiff = 1 + (distance / TARGET_DISTANCE) * 1.2;
-    const difficulty = distDiff + (stationDifficulty - 1);
+    // Difficulty comes from the survival timer ramp (passed as stationDifficulty)
+    const difficulty = stationDifficulty;
     // Modifier spawn multiplier (swarm=2x faster, armored=0.5x, etc.)
     const modSpawnMult = this.modifier ? this.modifier.spawnMult : 1;
 

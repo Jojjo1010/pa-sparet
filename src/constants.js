@@ -139,6 +139,7 @@ export const SHOP_TUNING = {
 
 // Run
 export const TARGET_DISTANCE = T('TARGET_DISTANCE', 10000);
+export const SURVIVAL_DURATION = T('SURVIVAL_DURATION', 600); // 10 minutes in seconds
 
 // Bandits
 export const BANDIT_SPEED = T('BANDIT_SPEED', 110);

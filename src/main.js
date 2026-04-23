@@ -2,9 +2,10 @@ import {
   CANVAS_WIDTH, CANVAS_HEIGHT, CAMERA_TRAIN_X,
   CAR_WIDTH, CAR_HEIGHT, CAR_GAP, TRAIN_SPEED,
   TARGET_DISTANCE, AUTO_WEAPONS, MAX_AUTO_WEAPON_LEVEL, MOUNT_RADIUS, MANUAL_GUN,
-  ZONES_PER_WORLD, ZONE_DIFFICULTY_SCALE, GOLD_PER_STATION, COAL_PER_WIN, SHOP_TUNING,
-  TRAIN_MAX_HP, COAL_SHOP_COST, COAL_SHOP_AMOUNT, AUTO_WEAPON_CONE_HALF_ANGLE,
-  BRAWLER_KICK_DAMAGE, BRAWLER_KICK_RADIUS
+  SHOP_TUNING,
+  TRAIN_MAX_HP, AUTO_WEAPON_CONE_HALF_ANGLE,
+  BRAWLER_KICK_DAMAGE, BRAWLER_KICK_RADIUS,
+  SURVIVAL_DURATION
 } from './constants.js';
 import { Train } from './train.js';
 import { Renderer3D } from './renderer3d.js';
@@ -14,22 +15,14 @@ import { CombatSystem } from './combat.js';
 import { CoinSystem } from './coins.js';
 import { BanditSystem, BANDIT_STATES } from './bandits.js';
 import { updateDamageAttribution, drawDamageAttribution, resetDamageAttribution } from './damageAttribution.js';
-import { Zone, STATION_TYPES } from './zone.js';
-import { playPowerup, startMusic, getMusicVolume, getSfxVolume, setMusicVolume, setSfxVolume, playLevelUpMp3, playZoneCompleteMp3, playWinWorldMp3, playDefeatMp3, preloadSfx, playWaveClear, updateLowHPWarning, stopLowHPWarning, playBrawlerKick, playKickLand } from './audio.js';
+import { playPowerup, startMusic, getMusicVolume, getSfxVolume, setMusicVolume, setSfxVolume, playLevelUpMp3, playDefeatMp3, preloadSfx, playWaveClear, updateLowHPWarning, stopLowHPWarning, playBrawlerKick, playKickLand } from './audio.js';
 
 const STATES = {
-  ZONE_MAP: 0, SETUP: 1, RUNNING: 2, LEVELUP: 3, PLACE_WEAPON: 4,
+  SETUP: 1, RUNNING: 2, LEVELUP: 3, PLACE_WEAPON: 4,
   GAMEOVER: 5, PAUSED: 6, SHOP: 7, SETTINGS: 8,
-  START_SCREEN: 9, WORLD_SELECT: 10, WORLD_MAP: 11,
-  RUN_PAUSE: 12,
+  START_SCREEN: 9, RUN_PAUSE: 12,
 };
 
-// World definitions — each sets a base difficulty multiplier and theme
-const WORLDS = [
-  { id: 1, name: 'The Dustlands',  subtitle: 'Arid plains crossing',       difficulty: 1.0, color: '#c8a96e', accent: '#f5a623', stars: 1 },
-  { id: 2, name: 'Iron Wastes',    subtitle: 'Ruined industrial badlands',  difficulty: 1.5, color: '#8ab5c8', accent: '#5ab4db', stars: 2 },
-  { id: 3, name: 'The Inferno',    subtitle: 'Volcanic hellscape',          difficulty: 2.0, color: '#e87050', accent: '#e74c3c', stars: 3 },
-];
 
 const threeCanvas = document.getElementById('game3d');
 const uiCanvas = document.getElementById('gameUI');
@@ -51,13 +44,11 @@ const coinSystem = new CoinSystem();
 const banditSystem = new BanditSystem();
 
 let state = STATES.START_SCREEN;
-let selectedWorld = WORLDS[0];
-let hoveredWorldIndex = -1;
 let train = null;
-let zone = null;
 let lastTime = performance.now();
 let won = false;
 let debugMode = false;
+let survivalTimer = 0;
 
 // Selection state
 let selectedCrew = null; // currently selected crew member
@@ -82,13 +73,9 @@ let slotMachineDisplayIdx = 0; // currently displayed crew index
 
 // === PERSISTENT UPGRADES (shop, kept across worlds — costs/levels from tuner) ===
 const ST = SHOP_TUNING;
-const STARTING_COAL = 4;
-const MAX_COAL = 8;
 
 const save = {
   gold: 0,
-  coal: STARTING_COAL,
-  maxCoal: MAX_COAL,
   upgrades: {
     damage:    { level: 0, maxLevel: ST.damage.maxLevel,    cost: ST.damage.cost,     icon: '\uD83D\uDC31', color: '#ffb74d', name: 'Gun Power',   desc: `+${ST.damage.perLevel}% gun damage` },
     kickForce: { level: 0, maxLevel: ST.kickForce.maxLevel, cost: ST.kickForce.cost,  icon: '\u26C4\uFE0F', color: '#66bb6a', name: 'Kick Force',  desc: `+20 kick dmg, +15 radius` },
@@ -115,7 +102,6 @@ const pauseButtons = {
   quit:    { x: CANVAS_WIDTH / 2 - 100, y: 400, w: 200, h: 50 },
 };
 
-let zoneNumber = 1;
 let combatDifficulty = 1;
 
 // --- FEATURE 2: first-boarding tooltip state ---
@@ -133,15 +119,6 @@ let fanfareColor = '#f5a623';
 // --- Hitstop (micro-freeze on kills) ---
 let hitStopTimer = 0;
 
-function newZone() {
-  zoneNumber++;
-  if (zoneNumber > ZONES_PER_WORLD) {
-    enterWorldComplete();
-    return;
-  }
-  zone = new Zone(zoneNumber, save);
-  state = STATES.ZONE_MAP;
-}
 
 function leaveShop() {
   state = STATES.START_SCREEN;
@@ -165,11 +142,17 @@ function applyShopUpgrades() {
 
 let garlicPlaced = false; // player must place garlic on a mount during setup
 
-function startNewWorld() {
-  zoneNumber = 1;
-  save.coal = STARTING_COAL;
-  save.maxCoal = MAX_COAL;
-  zone = new Zone(zoneNumber, save);
+function autoPlaceGarlic() {
+  if (train.hasAutoWeapon('autoLaser')) return;
+  const mount = train.allMounts.find(m => !m.isOccupied && !m.crew);
+  if (!mount) return;
+  mount.autoWeaponId = 'autoLaser';
+  mount.coneHalfAngle = AUTO_WEAPON_CONE_HALF_ANGLE;
+  train.autoWeapons.autoLaser = { level: 1, cooldownTimer: 0, tickTimer: 0, mount };
+  garlicPlaced = true;
+}
+
+function startNewRun() {
   combatDifficulty = 1;
   train = new Train();
   selectedCrew = null;
@@ -178,11 +161,11 @@ function startNewWorld() {
   for (const c of train.crew) c.role = null;
   rolesChosen = false;
   train.hp = train.maxHp;
+  survivalTimer = 0;
 }
 
-function prepareForCombat(isBossStation = false, modifier = null) {
-  state = STATES.SETUP;
-  train.combatDifficulty = combatDifficulty;
+function prepareForRun() {
+  train.combatDifficulty = 1;
   train.distance = 0;
   train.runGold = 0;
   train.damageFlash = 0;
@@ -191,12 +174,12 @@ function prepareForCombat(isBossStation = false, modifier = null) {
   train.lastStandTimer = 0;
   train.hpGreenFlashTimer = 0;
   selectedCrew = null;
+  survivalTimer = 0;
   spawner.reset();
-  spawner.isBossStation = isBossStation;
-  spawner.modifier = modifier || null;
-  if (modifier && modifier.id === 'ambush') spawner.applyAmbush();
+  spawner.isBossStation = false;
+  spawner.modifier = null;
   coinSystem.reset();
-  coinSystem.modifier = modifier || null;
+  coinSystem.modifier = null;
   combat.reset();
   banditSystem.reset();
   resetDamageAttribution();
@@ -206,7 +189,6 @@ function prepareForCombat(isBossStation = false, modifier = null) {
   fanfareTimer = 0;
   won = false;
   applyShopUpgrades();
-  // Don't reset roles/garlic here — they persist across stations in a world
   train.hp = Math.min(train.hp, train.maxHp);
 }
 
@@ -395,6 +377,31 @@ function updateCrewWalk(dt) {
 function updateSetup(dt) {
   train.updateWorldPositions(trainScreenX, trainScreenY);
 
+  // Role selection phase — pick Gunner/Brawler before placing crew
+  if (!rolesChosen) {
+    hoveredRoleBtn = null;
+    for (const btn of rolePickButtons) {
+      if (input.hitRect(btn.x, btn.y, btn.w, btn.h)) {
+        hoveredRoleBtn = btn.key;
+      }
+    }
+    if (input.leftClicked) {
+      for (const btn of rolePickButtons) {
+        if (!input.hitRect(btn.x, btn.y, btn.w, btn.h)) continue;
+        if (btn.type === 'roster') {
+          const emptyIdx = train.crew.findIndex(c => c.role === null);
+          if (emptyIdx >= 0) train.crew[emptyIdx].role = btn.roleId;
+        } else if (btn.type === 'slot') {
+          train.crew[btn.crewIdx].role = null;
+        } else if (btn.type === 'confirm') {
+          rolesChosen = true;
+          autoPlaceGarlic();
+        }
+      }
+    }
+    return;
+  }
+
   train.updateCrewMovement(dt);
   handleKeyboardRotation(dt);
   handleShiftCycle();
@@ -409,6 +416,7 @@ function updateSetup(dt) {
   if (input.leftClicked) {
     const crewPlaced = train.crew.some(c => c.assignment && !c.assignment.isDriverSeat);
     if (crewPlaced && input.hitRect(departBtn.x, departBtn.y, departBtn.w, departBtn.h)) {
+      prepareForRun();
       state = STATES.RUNNING;
       lastTime = performance.now();
       selectedCrew = null;
@@ -505,6 +513,12 @@ function updateSetup(dt) {
 }
 
 function renderSetup() {
+  if (!rolesChosen) {
+    renderer.drawTerrain(0);
+    rolePickButtons = renderer.drawRolePickUI(train.crew, hoveredRoleBtn, garlicPlaced);
+    renderer.flush();
+    return;
+  }
   train.updateWorldPositions(trainScreenX, trainScreenY);
   renderer.drawTerrain(0);
   renderer.drawSteamBlastAura(train);
@@ -588,6 +602,11 @@ function updateRun(dt) {
   }
 
   train.distance += TRAIN_SPEED * dt;
+  survivalTimer += dt;
+  combatDifficulty = 1 + (survivalTimer / SURVIVAL_DURATION) * 3;
+  train.combatDifficulty = combatDifficulty;
+  train._survivalTimer = survivalTimer;
+  train._survivalDuration = SURVIVAL_DURATION;
   // Hidden last-stand forgiveness timer
   train.updateLastStand(dt);
   // Regen: defense regen + Medic role bonus (2 HP/s when stationary 3+ seconds)
@@ -598,7 +617,7 @@ function updateRun(dt) {
   // Low-HP heartbeat warning
   updateLowHPWarning(train.hp / train.maxHp);
 
-  if (train.distance >= TARGET_DISTANCE) { won = true; enterGameOver(); return; }
+  if (survivalTimer >= SURVIVAL_DURATION) { won = true; enterGameOver(); return; }
   if (train.hp <= 0) { train.hp = 0; won = false; enterGameOver(); return; }
 
   for (const c of train.crew) if (c.reassignCooldown > 0) c.reassignCooldown -= dt;
@@ -838,6 +857,7 @@ function updateRun(dt) {
 
 function renderRun() {
   train.updateWorldPositions(trainScreenX, trainScreenY);
+  renderer._survivalRatio = survivalTimer / SURVIVAL_DURATION;
   renderer.applyShake(train, 0.016);
   renderer.drawTerrain(train.distance);
   renderer.drawSteamBlastAura(train);
@@ -1377,92 +1397,33 @@ function renderPlaceWeapon() {
 
 // --- GAMEOVER ---
 let goldEarned = 0;
-let gameOverType = 'death'; // 'death' | 'combat' | 'zone' | 'world'
+let gameOverType = 'death'; // 'death' | 'survived'
 
 function enterGameOver() {
   stopLowHPWarning();
-  const cargoMultiplier = train.cargoMultiplier;
-  const modGoldMult = spawner.modifier ? spawner.modifier.goldMult : 1;
   if (won) {
-    goldEarned = Math.floor(train.runGold * cargoMultiplier * modGoldMult);
-  } else {
-    goldEarned = train.runGold;
-  }
-  save.gold += goldEarned;
-  state = STATES.GAMEOVER;
-  gameOverType = won ? 'combat' : 'death';
-  if (won) {
-    zone.addCoal(COAL_PER_WIN);
+    goldEarned = Math.floor(train.runGold * train.cargoMultiplier);
+    gameOverType = 'survived';
     playPowerup();
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       setTimeout(() => renderer.spawnConfetti(), i * 150);
     }
   } else {
+    goldEarned = train.runGold;
+    gameOverType = 'death';
     playDefeatMp3();
   }
-}
-
-function enterZoneComplete() {
-  won = true;
-  goldEarned = zone.stationsVisited * GOLD_PER_STATION;
-  gameOverType = 'zone';
-  state = STATES.GAMEOVER;
-  playZoneCompleteMp3();
-  for (let i = 0; i < 6; i++) {
-    setTimeout(() => renderer.spawnConfetti(), i * 150);
-  }
-}
-
-function enterWorldComplete() {
-  won = true;
-  // World completion bonus gold
-  goldEarned = 200 + Math.floor(train.runGold * 0.5);
   save.gold += goldEarned;
-  gameOverType = 'world';
   state = STATES.GAMEOVER;
-  playWinWorldMp3();
-  // Massive confetti + fireworks bursts
-  for (let i = 0; i < 15; i++) {
-    setTimeout(() => renderer.spawnConfetti(), i * 150);
-  }
-  // Staggered firework bursts
-  for (let i = 0; i < 8; i++) {
-    setTimeout(() => renderer.spawnFirework(), 300 + i * 400);
-  }
 }
 
 const gameOverBtns = {
   continue: { x: CANVAS_WIDTH / 2 - 70, y: CANVAS_HEIGHT / 2 + 70, w: 140, h: 44 },
-  shop:     { x: CANVAS_WIDTH / 2 - 150, y: CANVAS_HEIGHT / 2 + 70, w: 130, h: 44 },
-  nextZone: { x: CANVAS_WIDTH / 2 + 20, y: CANVAS_HEIGHT / 2 + 70, w: 130, h: 44 },
 };
 
 function updateGameOver() {
   const confirmKey = input.keyPressed('Space') || input.keyPressed('Enter');
-
-  if (gameOverType === 'zone') {
-    if (confirmKey || (input.clicked && input.hitRect(gameOverBtns.nextZone.x, gameOverBtns.nextZone.y, gameOverBtns.nextZone.w, gameOverBtns.nextZone.h))) {
-      newZone();
-      state = STATES.WORLD_MAP;
-      return;
-    }
-  } else {
-    if (confirmKey || (input.clicked && input.hitRect(gameOverBtns.continue.x, gameOverBtns.continue.y, gameOverBtns.continue.w, gameOverBtns.continue.h))) {
-      if (gameOverType === 'combat') {
-        state = STATES.ZONE_MAP;
-      } else {
-        afterGameOver();
-      }
-      return;
-    }
-  }
-}
-
-function afterGameOver() {
-  if (won) {
-    state = STATES.ZONE_MAP;
-  } else {
-    // Death returns to the start screen so the player picks a world again
+  if (confirmKey || (input.clicked && input.hitRect(gameOverBtns.continue.x, gameOverBtns.continue.y, gameOverBtns.continue.w, gameOverBtns.continue.h))) {
     state = STATES.START_SCREEN;
   }
 }
@@ -1809,10 +1770,10 @@ function updatePaused() {
     state = stateBeforePause;
     lastTime = performance.now();
   } else if (clickedBtn('restart') || (confirmKey && kbPauseIndex === 1)) {
-    startNewWorld();
-    state = STATES.ZONE_MAP;
+    startNewRun();
+    state = STATES.SETUP;
   } else if (clickedBtn('quit') || (confirmKey && kbPauseIndex === 2)) {
-    state = STATES.ZONE_MAP;
+    state = STATES.START_SCREEN;
   }
 }
 
@@ -1837,191 +1798,7 @@ function renderPaused() {
   renderer.flush();
 }
 
-// --- ZONE MAP ---
-let kbZoneIndex = -1; // keyboard-selected reachable station index
-
-function getReachableStations() {
-  return zone.stations.filter(s => zone.canTravelTo(s.id));
-}
-
 let musicStarted = false;
-function updateZoneMap() {
-  renderer.setZoneGold(save.gold);
-
-  // Check if stranded (no coal, no reachable stations)
-  if (zone.failed) {
-    won = false;
-    goldEarned = 0;
-    gameOverType = 'death';
-    state = STATES.GAMEOVER;
-    playDefeatMp3();
-    return;
-  }
-
-  // Start music on first interaction
-  if (!musicStarted && input.clicked) {
-    startMusic();
-    preloadSfx();
-    musicStarted = true;
-  }
-
-  // Station arrival overlay
-  if (stationArrival) {
-    const dt = 0.016; // approximate frame dt
-    updateStationArrival(dt);
-    return; // block input during arrival
-  }
-
-  const reachable = getReachableStations();
-
-  // Keyboard navigation through reachable stations
-  if (input.keyPressed('ArrowRight') || input.keyPressed('KeyD')) {
-    kbZoneIndex = Math.min(reachable.length - 1, kbZoneIndex + 1);
-  }
-  if (input.keyPressed('ArrowLeft') || input.keyPressed('KeyA')) {
-    kbZoneIndex = Math.max(0, kbZoneIndex - 1);
-  }
-  if (input.keyPressed('ArrowDown') || input.keyPressed('KeyS')) {
-    // Find next reachable station below current
-    if (kbZoneIndex >= 0 && kbZoneIndex < reachable.length) {
-      const cur = reachable[kbZoneIndex];
-      let bestIdx = kbZoneIndex;
-      let bestDist = Infinity;
-      reachable.forEach((s, i) => {
-        if (s.y > cur.y && Math.abs(s.y - cur.y) < bestDist) {
-          bestDist = Math.abs(s.y - cur.y);
-          bestIdx = i;
-        }
-      });
-      kbZoneIndex = bestIdx;
-    }
-  }
-  if (input.keyPressed('ArrowUp') || input.keyPressed('KeyW')) {
-    if (kbZoneIndex >= 0 && kbZoneIndex < reachable.length) {
-      const cur = reachable[kbZoneIndex];
-      let bestIdx = kbZoneIndex;
-      let bestDist = Infinity;
-      reachable.forEach((s, i) => {
-        if (s.y < cur.y && Math.abs(s.y - cur.y) < bestDist) {
-          bestDist = Math.abs(s.y - cur.y);
-          bestIdx = i;
-        }
-      });
-      kbZoneIndex = bestIdx;
-    }
-  }
-
-  // Clamp
-  if (reachable.length > 0) {
-    kbZoneIndex = Math.max(0, Math.min(reachable.length - 1, kbZoneIndex));
-    // Pass to renderer for highlighting
-    renderer._kbHighlightStation = reachable[kbZoneIndex]?.id ?? -1;
-  } else {
-    renderer._kbHighlightStation = -1;
-  }
-
-  // Confirm with space/enter
-  if ((input.keyPressed('Space') || input.keyPressed('Enter')) && kbZoneIndex >= 0 && kbZoneIndex < reachable.length) {
-    const s = reachable[kbZoneIndex];
-    zone.travelTo(s.id);
-    kbZoneIndex = 0;
-    enterStation(s);
-    return;
-  }
-
-  // Settings button (top-right area)
-  const settingsBtn = { x: CANVAS_WIDTH - 110, y: 44, w: 90, h: 30 };
-  if (input.clicked && input.hitRect(settingsBtn.x, settingsBtn.y, settingsBtn.w, settingsBtn.h)) {
-    state = STATES.SETTINGS;
-    return;
-  }
-
-  // Mouse click on stations
-  if (input.clicked) {
-    for (const s of zone.stations) {
-      if (!zone.canTravelTo(s.id)) continue;
-      const pad = 60;
-      const mapW = CANVAS_WIDTH - pad * 2;
-      const mapH = CANVAS_HEIGHT - 100;
-      const mapY = 55;
-      const stX = pad + s.x * mapW;
-      const stY = mapY + s.y * mapH;
-      const dx = input.mouseX - stX;
-      const dy = input.mouseY - stY;
-      if (dx * dx + dy * dy <= 20 * 20) {
-        zone.travelTo(s.id);
-        kbZoneIndex = 0;
-        enterStation(s);
-        return;
-      }
-    }
-  }
-}
-
-let stationArrival = null; // { type, timer } — brief overlay showing what you found
-
-function enterStation(station) {
-  if (station.type === STATION_TYPES.START) return;
-
-  const isPreBoss = station.type === STATION_TYPES.COMBAT &&
-    station.connections.some(id => zone.stations[id].type === STATION_TYPES.EXIT);
-
-  const typeLabels = {
-    combat: isPreBoss ? '💀 FINAL BATTLE! 💀' : '⚔ ZOMBIES AHEAD! ⚔',
-    empty: '— Quiet Stop —',
-    start: '',
-    exit: '★ ZONE COMPLETE! ★',
-  };
-
-  stationArrival = {
-    type: station.type,
-    label: typeLabels[station.type] || '',
-    timer: station.type === STATION_TYPES.EMPTY ? 1.0 : 1.5,
-    station,
-    acted: false,
-    isPreBoss,
-  };
-}
-
-function updateStationArrival(dt) {
-  if (!stationArrival) return false;
-  stationArrival.timer -= dt;
-
-  if (stationArrival.timer <= 0 && !stationArrival.acted) {
-    stationArrival.acted = true;
-    const s = stationArrival.station;
-    switch (s.type) {
-      case STATION_TYPES.COMBAT: {
-        combatDifficulty = 1 + (zoneNumber - 1) * ZONE_DIFFICULTY_SCALE;
-        const isBoss = stationArrival?.isPreBoss || false;
-        if (isBoss) combatDifficulty *= 1.6;
-        prepareForCombat(isBoss, s.modifier || null);
-        break;
-      }
-      case STATION_TYPES.EXIT:
-        save.gold += zone.stationsVisited * GOLD_PER_STATION;
-        if (zoneNumber >= ZONES_PER_WORLD) {
-          enterWorldComplete();
-        } else {
-          enterZoneComplete();
-        }
-        break;
-      case STATION_TYPES.EMPTY:
-        // Stay on zone map
-        break;
-    }
-    stationArrival = null;
-  }
-  return true; // still showing
-}
-
-function renderZoneMap() {
-  renderer.drawZoneMap(zone, input, save);
-  if (stationArrival) {
-    renderer.drawStationArrival(stationArrival);
-  }
-  renderer.flush();
-}
 
 // --- START SCREEN ---
 const startScreenBtns = {
@@ -2033,10 +1810,8 @@ const startScreenBtns = {
 function updateStartScreen() {
   if (!input.clicked) return;
   if (input.hitRect(startScreenBtns.start.x, startScreenBtns.start.y, startScreenBtns.start.w, startScreenBtns.start.h)) {
-    selectedWorld = WORLDS[0];
-    startNewWorld();
-    combatDifficulty = selectedWorld.difficulty;
-    state = STATES.WORLD_MAP;
+    startNewRun();
+    state = STATES.SETUP;
   } else if (input.hitRect(startScreenBtns.powerups.x, startScreenBtns.powerups.y, startScreenBtns.powerups.w, startScreenBtns.powerups.h)) {
     hoveredShopItem = -1;
     kbShopIndex = 0;
@@ -2051,119 +1826,6 @@ function renderStartScreen() {
   renderer.flush();
 }
 
-// --- WORLD SELECT ---
-const WORLD_CARD = { w: 210, h: 270, gap: 28 };
-
-function getWorldCardX(i) {
-  const total = WORLDS.length * WORLD_CARD.w + (WORLDS.length - 1) * WORLD_CARD.gap;
-  return CANVAS_WIDTH / 2 - total / 2 + i * (WORLD_CARD.w + WORLD_CARD.gap);
-}
-
-function updateWorldSelect() {
-  hoveredWorldIndex = -1;
-  const cardY = CANVAS_HEIGHT / 2 - WORLD_CARD.h / 2;
-  for (let i = 0; i < WORLDS.length; i++) {
-    const cx = getWorldCardX(i);
-    if (input.hitRect(cx, cardY, WORLD_CARD.w, WORLD_CARD.h)) {
-      hoveredWorldIndex = i;
-      if (input.clicked) {
-        selectedWorld = WORLDS[i];
-        startNewWorld();
-        // Apply world difficulty on top of the reset done by startNewWorld
-        combatDifficulty = selectedWorld.difficulty;
-        state = STATES.WORLD_MAP;
-      }
-    }
-  }
-  if (input.keyPressed('Escape')) state = STATES.START_SCREEN;
-}
-
-function renderWorldSelect() {
-  renderer.drawWorldSelect(WORLDS, WORLD_CARD, getWorldCardX, hoveredWorldIndex, input);
-  renderer.flush();
-}
-
-// --- WORLD MAP ---
-function getWorldMapZones() {
-  const nodeR = 48;
-  const gap = 120;
-  const total = ZONES_PER_WORLD * nodeR * 2 + (ZONES_PER_WORLD - 1) * gap;
-  const startX = CANVAS_WIDTH / 2 - total / 2 + nodeR;
-  const cy = CANVAS_HEIGHT / 2 - 10;
-  return Array.from({ length: ZONES_PER_WORLD }, (_, i) => ({
-    index: i,
-    number: i + 1,
-    cx: startX + i * (nodeR * 2 + gap),
-    cy,
-    r: nodeR,
-    completed: zoneNumber > i + 1,
-    isCurrent: zoneNumber === i + 1,
-    isLocked: zoneNumber < i + 1,
-  }));
-}
-
-function autoPlaceGarlic() {
-  if (train.hasAutoWeapon('autoLaser')) return;
-  const mount = train.allMounts.find(m => !m.isOccupied && !m.crew);
-  if (!mount) return;
-  mount.autoWeaponId = 'autoLaser';
-  mount.coneHalfAngle = AUTO_WEAPON_CONE_HALF_ANGLE;
-  train.autoWeapons.autoLaser = { level: 1, cooldownTimer: 0, tickTimer: 0, mount };
-  garlicPlaced = true;
-}
-
-function updateWorldMap() {
-  // Loadout pick (once per world) — crew roles + weapon
-  if (!rolesChosen) {
-    hoveredRoleBtn = null;
-    for (const btn of rolePickButtons) {
-      if (input.hitRect(btn.x, btn.y, btn.w, btn.h)) {
-        hoveredRoleBtn = btn.key;
-      }
-    }
-    if (input.leftClicked) {
-      for (const btn of rolePickButtons) {
-        if (!input.hitRect(btn.x, btn.y, btn.w, btn.h)) continue;
-        if (btn.type === 'roster') {
-          const emptyIdx = train.crew.findIndex(c => c.role === null);
-          if (emptyIdx >= 0) train.crew[emptyIdx].role = btn.roleId;
-        } else if (btn.type === 'slot') {
-          train.crew[btn.crewIdx].role = null;
-        } else if (btn.type === 'confirm') {
-          rolesChosen = true;
-        }
-      }
-    }
-    return;
-  }
-
-  // Normal world map
-  const zones = getWorldMapZones();
-  for (const z of zones) {
-    if (!z.isCurrent) continue;
-    if (input.clicked) {
-      const dx = input.mouseX - z.cx, dy = input.mouseY - z.cy;
-      if (dx * dx + dy * dy <= z.r * z.r) {
-        state = STATES.ZONE_MAP;
-      }
-    }
-  }
-  if (input.keyPressed('Escape')) state = STATES.START_SCREEN;
-}
-
-function renderWorldMap() {
-  // Loadout pick
-  if (!rolesChosen) {
-    renderer.drawTerrain(0);
-    rolePickButtons = renderer.drawRolePickUI(train.crew, hoveredRoleBtn, garlicPlaced);
-    renderer.flush();
-    return;
-  }
-
-  // Normal world map
-  renderer.drawWorldMap(getWorldMapZones(), selectedWorld, zoneNumber, input);
-  renderer.flush();
-}
 
 // --- MAIN LOOP ---
 function loop(timestamp) {
@@ -2185,7 +1847,7 @@ function loop(timestamp) {
   }
 
   // Esc toggles pause (from running, setup, or levelup) — not from RUN_PAUSE (handled there)
-  if (state !== STATES.PAUSED && state !== STATES.RUN_PAUSE && state !== STATES.GAMEOVER && state !== STATES.SHOP && state !== STATES.ZONE_MAP && state !== STATES.START_SCREEN && state !== STATES.WORLD_SELECT && state !== STATES.WORLD_MAP && input.keyPressed('Escape')) {
+  if (state !== STATES.PAUSED && state !== STATES.RUN_PAUSE && state !== STATES.GAMEOVER && state !== STATES.SHOP && state !== STATES.START_SCREEN && input.keyPressed('Escape')) {
     stateBeforePause = state;
     state = STATES.PAUSED;
     // Consume the frame so updatePaused doesn't see the same Esc
@@ -2197,9 +1859,6 @@ function loop(timestamp) {
 
   switch (state) {
     case STATES.START_SCREEN:  updateStartScreen();  renderStartScreen();  break;
-    case STATES.WORLD_SELECT:  updateWorldSelect();  renderWorldSelect();  break;
-    case STATES.WORLD_MAP:     updateWorldMap();     renderWorldMap();     break;
-    case STATES.ZONE_MAP:      updateZoneMap();      renderZoneMap();      break;
     case STATES.SETUP:         updateSetup(dt);      renderSetup();        break;
     case STATES.RUNNING:       updateRun(dt);        renderRun();          break;
     case STATES.LEVELUP:       updateLevelUp();      renderLevelUp();      break;
@@ -2214,7 +1873,7 @@ function loop(timestamp) {
   requestAnimationFrame(loop);
 }
 
-// Initialize game data so train/zone exist, but start on the title screen
-startNewWorld();
+// Initialize game data so train exists, but start on the title screen
+startNewRun();
 state = STATES.START_SCREEN;
 requestAnimationFrame(loop);
